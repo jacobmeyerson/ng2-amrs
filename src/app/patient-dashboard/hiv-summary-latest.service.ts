@@ -1,43 +1,26 @@
-import { Component, OnInit } from '@angular/core';
-/*import { PatientService } from '../../services/patient.service';
-import { HivSummaryService } from '../../hiv/hiv-summary/hiv-summary.service';
-import { Patient } from '../../../models/patient.model';
+import { Injectable } from '@angular/core';
+
+import { PatientService } from './services/patient.service';
+import { HivSummaryService } from './hiv/hiv-summary/hiv-summary.service';
+import { Patient } from '../models/patient.model';
 import { Subscription } from 'rxjs';
-*/
-// import { HivSummaryLatestComponent } from '../../hiv/hiv-summary/hiv-summary-latest.component';
-import { HivPatientBannerService } from './hiv-patient-banner.service';
 
-@Component({
-  selector: 'hiv-patient-banner',
-  templateUrl: './hiv-patient-banner.component.html',
-  styleUrls: ['./hiv-patient-banner.component.css'],
-  providers: [HivPatientBannerService]
-})
-export class HivPatientBannerComponent implements OnInit {
-  public bob;
-  public toggle: boolean = false;
+@Injectable()
+export class HivSummaryLatestService {
+  public loadingHivSummary: boolean = false;
+  public hivSummary: any = 'ADFSDFSDFSD';
+  public subscription: Subscription;
+  public patient: Patient;
+  public patientUuid: any;
+  public errors: any = [];
 
-  constructor(private hivPatientBannerService: HivPatientBannerService) {}
-
-  public buttonClick() {
-    this.toggle = !this.toggle;
-  }
-
-  public ngOnInit() {
-    this.getHivInfo();
-  }
-
-  private getHivInfo() {
-    this.bob = this.hivPatientBannerService.getHivInfo();
-  }
+  constructor() { }
 
 }
 
-/*  
+/*
 
-
-
-public loadingHivSummary: boolean = false;
+  public loadingHivSummary: boolean = false;
   public hivSummary: any;
   public subscription: Subscription;
   public patient: Patient;
@@ -97,4 +80,5 @@ public loadingHivSummary: boolean = false;
         });
       });
   }
-} */
+}
+*/
