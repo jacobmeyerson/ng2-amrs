@@ -14,12 +14,8 @@ import { HivSummaryLatestService } from '../../hiv-summary-latest.service';
   providers: [HivSummaryLatestService]
 })
 export class HivSummaryLatestComponent implements OnInit {
-  public loadingHivSummary: boolean = false;
   public hivSummary: any;
-  public subscription: Subscription;
-  public patient: Patient;
-  public patientUuid: any;
-  public errors: any = [];
+  public subscriptionComp: Subscription;
 
   constructor(private hivSummaryLatestService: HivSummaryLatestService) {}
 
@@ -28,7 +24,16 @@ export class HivSummaryLatestComponent implements OnInit {
   }
 
   private getHivSummary() {
-    this.loadingHivSummary = this.hivSummaryLatestService.loadingHivSummary;
-    this.hivSummary = this.hivSummaryLatestService.hivSummary;
+    // console.log(this.loadingHivSummary);
+    // this.hivSummaryLatestService.getPatient();
+    // this.hivSummary = this.hivSummaryLatestService.hivSummary;
+    // console.log(this.loadingHivSummary);
+    // console.log(this.hivSummary);
+    // console.log(this.patient);
+    // this.subscriptionComp = 
+    setTimeout(function() {
+      this.hivSummary = this.hivSummaryLatestService.hivSummary; },
+      7000);
+    console.log(this.hivSummary);
   }
 }

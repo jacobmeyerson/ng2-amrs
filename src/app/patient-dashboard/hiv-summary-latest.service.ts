@@ -4,24 +4,12 @@ import { PatientService } from './services/patient.service';
 import { HivSummaryService } from './hiv/hiv-summary/hiv-summary.service';
 import { Patient } from '../models/patient.model';
 import { Subscription } from 'rxjs';
+import { ReplaySubject, BehaviorSubject, Observable } from 'rxjs/Rx';
 
 @Injectable()
 export class HivSummaryLatestService {
   public loadingHivSummary: boolean = false;
-  public hivSummary: any = 'ADFSDFSDFSD';
-  public subscription: Subscription;
-  public patient: Patient;
-  public patientUuid: any;
-  public errors: any = [];
-
-  constructor() { }
-
-}
-
-/*
-
-  public loadingHivSummary: boolean = false;
-  public hivSummary: any;
+  public hivSummary: BehaviorSubject<any> = new BehaviorSubject(null);
   public subscription: Subscription;
   public patient: Patient;
   public patientUuid: any;
@@ -30,15 +18,17 @@ export class HivSummaryLatestService {
   constructor(private hivSummaryService: HivSummaryService,
               private patientService: PatientService) {}
 
-  public ngOnInit() {
+  /*public ngOnInit() {
     this.getPatient();
-  }
+  }*/
 
   public getPatient() {
     this.loadingHivSummary = true;
     this.subscription = this.patientService.currentlyLoadedPatient.subscribe(
       (patient) => {
+        console.log('made it');
         if (patient) {
+          console.log('patient loading');
           this.patient = patient;
           this.patientUuid = this.patient.person.uuid;
           this.loadHivSummary(this.patientUuid);
@@ -81,4 +71,3 @@ export class HivSummaryLatestService {
       });
   }
 }
-*/
