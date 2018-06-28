@@ -69,12 +69,7 @@ export class ProgramsTransferCareService {
   }
 
   public fetchAllProgramTransferConfigs(patientUuid): Observable<any> {
-    let subject: BehaviorSubject<any> = new BehaviorSubject<any>(null);
-    this.patientProgramResourceService.getPatientProgramVisitConfigs(patientUuid)
-      .subscribe((programConfigs) => {
-      subject.next(programConfigs);
-    });
-    return subject;
+    return this.patientProgramResourceService.getPatientProgramVisitConfigs(patientUuid);
   }
 
   public transferPatient(patient: Patient, programs: any[]) {
@@ -89,8 +84,7 @@ export class ProgramsTransferCareService {
       if (program.transferType === 'AMPATH') {
         let enrollPayload = this.programService.createEnrollmentPayload(
           program.programUuid, patient, program.transferDate, null,
-          program.location.locations, '');
-        console.log();
+          program.location.locations.value, '');
         if (program.enrolledProgram.states) {
           let state: any = _.first(program.enrolledProgram.states);
           if (state) {

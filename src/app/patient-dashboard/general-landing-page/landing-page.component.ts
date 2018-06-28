@@ -44,6 +44,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
   public isReferral: boolean = false;
   public submittedEncounter: any = {};
   public selectedProgram: any;
+  public referralProgramOnDetail: any;
   public errors: any[] = [];
   public referralPrograms: any[] = [];
   public enrollmentButtonActive: boolean  = false;
@@ -84,7 +85,11 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
   private subscription: Subscription;
   private locationSubscription: Subscription;
   private locationReferredFrom: any = '';
-
+  /**
+   * PROGRAM EDIT MODE HAS SINCE BEEN DISABLED. THIS COMPONENT STILL HAS SOME EDIT CODE JUST IN
+   * CASE IT WILL BE ENABLED IN FUTURE
+   *
+   */
   constructor(private patientService: PatientService,
               private programService: ProgramService,
               private departmentProgramService: DepartmentProgramsConfigService,
@@ -151,9 +156,20 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
       let referralEncounters = _.filter(this.patient.encounters, (encounter) => {
         return encounter.location.uuid === location.uuid;
       });
+
       this.selectedEncounter = new Encounter(_.first(referralEncounters));
-      this.staticModal.show();
-      this.showReferralEncounterDetail = true;
+      this.patientReferralService.getReferralEncounterDetails(this.selectedEncounter.uuid)
+        .subscribe((encounterWithObs) => {
+        // search for PATIENT CHANGE STATE obs item. PATIENT CHANGE STATE is a required field
+        let patientState = _.find(encounterWithObs.obs, (singleOb) => {
+          return singleOb.concept.uuid === 'aad64a84-1a63-47e3-a806-fb704b52b709';
+        });
+          this.referralProgramOnDetail = row;
+          // override the default state value
+          this.referralProgramOnDetail.program_workflow_state = patientState.value.display;
+          this.staticModal.show();
+          this.showReferralEncounterDetail = true;
+      });
     });
   }
 
@@ -192,16 +208,9 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
       this.selectedLocation = null;
     }
     this._removeErrorMessage();
-    let patientEnrolled = !_.isNil(this.selectedProgram.enrolledProgram);
-    if (patientEnrolled) {
-      let hasLocation = this.selectedProgram.enrolledProgram.location;
-      if (!_.isNil(hasLocation) && hasLocation.uuid === loc.locations) {
-        this._showErrorMessage('Patient is already enrolled in this location for same program. ' +
-          'Please change program or location');
-      } else {
-        this.hasValidationErrors = false;
-        this.currentError = '';
-      }
+    this.checkIfEnrollmentIsAllowed();
+    if (this.isReferral) {
+      this.referPatient();
     }
     this.updateEnrollmentButtonState();
   }
@@ -215,9 +224,11 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
 
   public onAbortingReferral() {
     this.patientReferralService.saveProcessPayload(null);
+    this._removeErrorMessage();
     this.isReferral = false;
   }
 
+  // EDIT CODE
   public editPatientEnrollment(row: any) {
     row.isFocused = true;
     this.isEdit = true;
@@ -277,10 +288,13 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
   }
 
   public referPatient() {
-
-    if (this.hasValidateDate()) {
+    if (this.hasValidReferralDate()) {
       this.isReferral = true;
-      this.handleReferral();
+      if (this.isValidForm({
+          dateEnrolled: this.dateEnrolled,
+          dateCompleted: this.dateCompleted})) {
+        this.handleReferral();
+      }
     }
   }
 
@@ -292,14 +306,14 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     this.isEditLocation = loc;
   }
 
-  public hasValidateDate() {
+  public hasValidReferralDate() {
     if (this.dateEnrolled !== moment().format('Y-MM-DD')) {
       this.hasValidationErrors = true;
-      this.currentError = 'Referral date cannot be in future or in the past';
+      this.currentError = this.dateEnrolled ? 'Referral date cannot be in future or in the past'
+      : 'Date Enrolled is required';
       return false;
     } else {
-      this.hasValidationErrors = false;
-      this.currentError = undefined;
+      this._removeErrorMessage();
       return true;
     }
   }
@@ -308,8 +322,6 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
       let programUuid = $event ? $event.value : null;
       if (programUuid) {
        this.programIncompatible = false;
-       this.hasValidationErrors = false;
-       this.currentError = undefined;
        this.incompatibleProgrames = [];
        this.checkForRequiredQuestions();
        this.selectedProgram = _.find(this.patient.enrolledPrograms, (_program) => {
@@ -319,6 +331,8 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
        this.checkIfEnrollmentIsAllowed();
       // check the compatibility of the program
        this.checkIncompatibility(programUuid);
+      } else {
+        this._removeErrorMessage();
       }
       this.updateEnrollmentButtonState();
 
@@ -403,8 +417,18 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  public onRequiredQuestionChange(event: string, question: any) {
-    this._preQualifyProgramEnrollment(question);
+  public onRequiredQuestionChange(event: string) {
+    // pick questions that have wrong answer
+    let questionWithWrongAnswer = _.find(this.requiredProgramQuestions, (question) => {
+      return question.value !== question.enrollIf;
+    });
+
+    if (questionWithWrongAnswer) {
+      this._preQualifyProgramEnrollment(questionWithWrongAnswer);
+    } else {
+      this._removeErrorMessage();
+    }
+    this.updateEnrollmentButtonState();
   }
 
   public getDepartmentConf() {
@@ -421,6 +445,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
   public getSelectedDepartment(department: string) {
     this.department = department;
     this.program = undefined;
+    this._removeErrorMessage();
     let departmentPrograms = _.map(this._getProgramsByDepartmentName(), 'uuid');
     this.availableDepartmentPrograms = _.filter(this.availablePrograms, (program: any) => {
       return _.includes(departmentPrograms, program.program.uuid);
@@ -447,9 +472,12 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
 
   }
 
+  public removeFromQueue() {
+    this.updateReferalNotificationStatus()
+  }
+
   private updateEnrollmentButtonState() {
-    // just return true. disabling the button is a bad idea
-      this.enrollmentButtonActive = !!this.program;
+      this.enrollmentButtonActive = !!this.program && !this.hasValidationErrors;
   }
 
   private handleReferral(referBack?: boolean): void {
@@ -482,6 +510,11 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     if (_config) {
       let enrollmentOptions = _.get(_config, 'enrollmentOptions');
       _.extend(this.selectedProgram, enrollmentOptions);
+      if (this.referralProgramOnDetail && referBack) {
+        _.extend(this.selectedProgram, {
+          patient_referral_id: this.referralProgramOnDetail.patient_referral_id
+        });
+      }
       let stateChangeForms = _.get(_config, 'stateChangeForms');
       if (!_.isEmpty(stateChangeForms)) {
         targetStateChange = _.find(stateChangeForms, (state) => {
@@ -495,6 +528,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
               : state.concept.uuid === '0c5565c5-45cf-40ab-aa6d-5694aeabae18';
           }));
         this.referralPrograms = [this.selectedProgram];
+        this.selectedWorkFlowState = targetProgramState;
         this.programForms = targetStateChange.forms;
         _.extend(targetProgramState, {
           programForms: this.programForms,
@@ -517,8 +551,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
           'Only female patients are allowed');
       }
     } else {
-      this.hasValidationErrors = false;
-      this.currentError = '';
+      this._removeErrorMessage();
     }
   }
 
@@ -560,7 +593,10 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
                 this.getReferredByLocation(program.enrolledProgram.uuid)
                   .subscribe((referral) => {
                     program.referred_from_location = referral.referred_from_location;
+                    program.referral_completed = !_.isNil(referral.notification_status);
                     program.referral_reason = referral.referral_reason;
+                    program.program_workflow_state = referral.program_workflow_state;
+                    program.patient_referral_id = referral.patient_referral_id;
                 });
               }
           });
@@ -577,6 +613,18 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
       });
   }
 
+  private updateReferalNotificationStatus() {
+    this.patientReferralService.updateReferalNotificationStatus({
+      patient_referral_id: this.referralProgramOnDetail.patient_referral_id,
+      notificationStatus: 1
+    }).subscribe((response) => {
+      this.hideEncounterModal();
+      this.patientService.fetchPatientByUuid(this.patient.uuid);
+    }, (error) => {
+      console.log('updateReferalNotificationStatus error ====> ', error);
+    });
+  }
+
   private isValidForm(row: any) {
     let currentLocation;
     if (row.enrolledProgram && row.enrolledProgram.openmrsModel &&
@@ -587,6 +635,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
         this.selectedLocation || currentLocation)) {
       row.validationError = this.currentError;
       this.isFocused = false;
+      // edit was disabled. This is left here incase its enabled in future
       if (this.isEdit) {
         this.currentError = '';
         if (!_.isNil(row.isFocused)) {
@@ -600,6 +649,19 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     return !this.hasValidationErrors;
   }
 
+  private _sameEnrollmentLocationAllowed() {
+    let patientEnrolled = !_.isNil(this.selectedProgram.enrolledProgram);
+    if (patientEnrolled && !this.isReferral && !_.isNil(this.selectedLocation)) {
+      let hasLocation = this.selectedProgram.enrolledProgram.location;
+      if (!_.isNil(hasLocation) && hasLocation.uuid === this.selectedLocation.value) {
+        this._showErrorMessage('Patient is already enrolled in this location in same program. ' +
+          'You can only refer to same location. Otherwise change program or location.');
+      } else {
+        this._removeErrorMessage();
+      }
+    }
+  }
+
   private _preQualifyProgramEnrollment(question: any) {
     let requiredStatus = _.find(question.answers, (ans) => ans.value === question.enrollIf);
     if (requiredStatus && question.value !== question.enrollIf) {
@@ -608,7 +670,12 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     } else {
       this._removeErrorMessage();
     }
-    this.updateEnrollmentButtonState();
+  }
+
+  private _validateRequiredQuestions() {
+    if (this.requiredProgramQuestions.length > 0) {
+      this.onRequiredQuestionChange('');
+    }
   }
 
   private _filterDepartmentConfigByName() {
@@ -639,6 +706,15 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
             this.confirmationMesssage = 'The patient has been enrolled in ' +
               currentProgram.program.display  + ' at ' + enrollment.location.display +
               ' starting ' + moment(enrollment.dateEnrolled).format('MMM Do, YYYY');
+          } else {
+            currentProgram = _.first(_.filter(this.availablePrograms,
+              (_program: any) => {
+                return _program.isEnrolled && (_program.programUuid === this.program.value);
+              }));
+            this.confirmationMesssage = 'The patient enrollment has been switched from ' +
+              currentProgram.enrolledProgram.location.display  + ' to '
+              + enrollment.location.display +
+              ' starting ' + moment(enrollment.dateEnrolled).format('MMM Do, YYYY');
           }
           this.loadProgramBatch();
           setTimeout(() => {
@@ -647,54 +723,64 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
             this.patientService.fetchPatientByUuid(this.patient.uuid);
             this.enrollmentCompleted = false;
             this.updateEnrollmentButtonState();
-          }, 2500);
+          }, 3500);
         }
       }
     );
   }
+
+  // THIS FUNCTION  HAS SOME EDIT MODE CODE. SEE THE BEGINNING OF THIS COMPONENT CLASS FOR MORE
   private _formFieldsValid(enrolledDate, completedDate, location) {
 
+    let allFieldsValid = true;
     if (!this._isAllRequiredQuestionsAnswered()) {
-      return false;
+      allFieldsValid = false;
+    }
+
+    if (!this._sameEnrollmentLocationAllowed()) {
+      allFieldsValid = false;
     }
 
     if (!this.isEdit && _.isUndefined(this.program)) {
       this._showErrorMessage('Program is required.');
-      return false;
+      allFieldsValid = false;
     }
 
     if (this.programHasWorkflows
       && (_.isNil(this.selectedWorkflow) || _.isNil(this.selectedWorkFlowState))) {
       this._showErrorMessage('You must assign a workflow and state to the program');
-      return false;
+      allFieldsValid = false;
     }
 
+    // EDIT MODE CODE
     if (!_.isNil(enrolledDate) && !_.isNil(completedDate) && !this.isEdit) {
       this._showErrorMessage('Date Completed should not be specified while enrolling');
-      return false;
+      allFieldsValid = false;
     }
 
-    if (_.isNil(enrolledDate) || (!_.isNil(completedDate) && _.isNil(completedDate))) {
+    // when date is reset, the date remains an empty string instead of undefined.
+    // Hence empty validation
+    if (_.isNil(enrolledDate) || _.isEmpty(enrolledDate)) {
       this._showErrorMessage('Date Enrolled is required.');
-      return false;
+      allFieldsValid = false;
     }
-    if (_.isNil(location) || (!_.isNil(completedDate) && _.isNil(completedDate))
-      || (!_.isNil(enrolledDate) && _.isNil(enrolledDate))) {
+
+    if (_.isNil(location)) {
       this._showErrorMessage('Location Enrolled is required.');
-      return false;
+      allFieldsValid = false;
     }
 
     if ((!_.isNil(completedDate) && !moment(completedDate).isAfter(enrolledDate))) {
       this._showErrorMessage('Date Completed should be after Date Enrolled');
-      return false;
+      allFieldsValid = false;
     }
 
     if (this._isFutureDates(enrolledDate, completedDate) === true) {
       this._showErrorMessage('Date Enrolled or Date Completed should not be in future');
-      return false;
+      allFieldsValid = false;
     }
 
-    return true;
+    return allFieldsValid;
   }
 
   private _isAllRequiredQuestionsAnswered(): boolean {
@@ -707,6 +793,11 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
       });
       if (unAnsweredQuestions.length > 0) {
         this._showErrorMessage('All required questions must be filled');
+        return false;
+      }
+      this._validateRequiredQuestions();
+
+      if (this.hasValidationErrors) {
         return false;
       }
     }
@@ -743,6 +834,7 @@ export class GeneralLandingPageComponent implements OnInit, OnDestroy {
     this.department = undefined;
     this.isEdit = false;
     this.errors = [];
+    this.isReferral = false;
     this.programForms = [];
     this.referralPrograms = [];
     this.dateEnrolled = undefined;
