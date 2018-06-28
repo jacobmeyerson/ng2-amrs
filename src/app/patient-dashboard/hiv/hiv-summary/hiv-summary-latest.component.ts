@@ -5,35 +5,70 @@ import { HivSummaryService } from './hiv-summary.service';
 import { Patient } from '../../../models/patient.model';
 import { Subscription } from 'rxjs';
 
-import { HivSummaryLatestService } from '../../hiv-summary-latest.service';
-
 @Component({
   selector: 'hiv-summary-latest',
   templateUrl: './hiv-summary-latest.component.html',
-  styleUrls: ['./hiv-summary.component.css'],
-  providers: [HivSummaryLatestService]
+  styleUrls: ['./hiv-summary.component.css']
 })
 export class HivSummaryLatestComponent implements OnInit {
+  public loadingHivSummary: boolean = false;
   public hivSummary: any;
-  public subscriptionComp: Subscription;
+  public subscription: Subscription;
+  public patient: Patient;
+  public patientUuid: any;
+  public errors: any = [];
 
-  constructor(private hivSummaryLatestService: HivSummaryLatestService) {}
+  constructor(private hivSummaryService: HivSummaryService,
+              private patientService: PatientService) {}
 
   public ngOnInit() {
-    this.getHivSummary();
+    this.getPatient();
   }
 
-  private getHivSummary() {
-    // console.log(this.loadingHivSummary);
-    // this.hivSummaryLatestService.getPatient();
-    // this.hivSummary = this.hivSummaryLatestService.hivSummary;
-    // console.log(this.loadingHivSummary);
-    // console.log(this.hivSummary);
-    // console.log(this.patient);
-    // this.subscriptionComp = 
-    setTimeout(function() {
-      this.hivSummary = this.hivSummaryLatestService.hivSummary; },
-      7000);
-    console.log(this.hivSummary);
+  public getPatient() {
+    this.loadingHivSummary = true;
+    this.subscription = this.patientService.currentlyLoadedPatient.subscribe(
+      (patient) => {
+        if (patient) {
+          this.patient = patient;
+          this.patientUuid = this.patient.person.uuid;
+          this.loadHivSummary(this.patientUuid);
+        }
+      }, (err) => {
+        this.loadingHivSummary = false;
+        this.errors.push({
+          id: 'patient',
+          message: 'error fetching patient'
+        });
+      });
+  }
+
+  public loadHivSummary(patientUuid) {
+    this.hivSummaryService.getHivSummary(
+      patientUuid, 0, 1, false)
+      .subscribe((data) => {
+        if (data) {
+
+          for (let summary of data){
+
+            // check if encounter is clinical
+            if ( summary.is_clinical_encounter === 1) {
+
+             this.hivSummary = summary;
+             break;
+
+          }
+
+         }
+
+        }
+        this.loadingHivSummary = false;
+      }, (err) => {
+        this.loadingHivSummary = false;
+        this.errors.push({
+          id: 'Hiv Summary',
+          message: 'An error occured while loading Hiv Summary. Please try again.'
+        });
+      });
   }
 }
